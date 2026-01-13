@@ -168,6 +168,9 @@ export default defineConfig((/* ctx */) => {
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/developing-electron-apps/configuring-electron
     electron: {
       // extendElectronMainConf (esbuildConf) {},
+      extendElectronMainConf(esbuildConf) {
+        esbuildConf.external = [...(esbuildConf.external || []), 'better-sqlite3'];
+      },
       // extendElectronPreloadConf (esbuildConf) {},
 
       // extendPackageJson (json) {},
@@ -178,7 +181,7 @@ export default defineConfig((/* ctx */) => {
       // specify the debugging port to use for the Electron app when running in development mode
       inspectPort: 5858,
 
-      bundler: 'packager', // 'packager' or 'builder'
+      bundler: 'builder', // 'packager' or 'builder'
 
       packager: {
         // https://github.com/electron-userland/electron-packager/blob/master/docs/api.md#options
@@ -189,12 +192,23 @@ export default defineConfig((/* ctx */) => {
         // protocol: 'myapp://path',
         // Windows only
         // win32metadata: { ... }
+        extraResource: ['src-electron/db/migrations'],
       },
 
       builder: {
         // https://www.electron.build/configuration/configuration
 
         appId: 'controle-financeiro',
+        extraResources: [
+          {
+            from: 'src-electron/db/migrations',
+            to: 'migrations',
+            filter: ['**/*'],
+          },
+        ],
+        win: {
+          target: 'nsis',
+        },
       },
     },
 

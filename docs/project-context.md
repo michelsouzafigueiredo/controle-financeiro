@@ -14,6 +14,7 @@ Diferente das soluções SaaS atuais, este software:
 
 ### Frontend (Renderer Process)
 
+- **Language:** TypeScript.
 - **Framework:** Vue.js 3 (Composition API + Script Setup).
 - **UI Library:** Quasar Framework (Vite Plugin).
 - **State Management:** Pinia.
@@ -21,56 +22,62 @@ Diferente das soluções SaaS atuais, este software:
 
 ### Backend Local (Main Process)
 
+- **Language:** TypeScript.
 - **Runtime:** Node.js (via Electron).
 - **Platform:** Electron.
 - **Database:** SQLite.
-- **Drivers & ORM:** `better-sqlite3` (driver síncrono de alta performance) e `knex` (Query Builder & Migrations).
+- **Drivers & ORM:** `better-sqlite3` (driver síncrono de alta performance) e `drizzle-orm` (TypeScript ORM).
 
 ## 3. Arquitetura e Fluxo de Dados
 
-O projeto segue estritamente a arquitetura de **Isolamento de Processos** do Electron.
+O projeto segue estritamente a arquitetura de **Isolamento de Processos** do Electron, agora reforçada por tipagem estática.
 
 ### Regras de Ouro para Desenvolvimento (IA Instructions)
 
 1.  **Sem Acesso Direto:** O Frontend (`src/`) NUNCA acessa o banco de dados ou o sistema de arquivos diretamente.
-2.  **Padrão IPC:** Toda comunicação deve passar pela ponte `preload.js` usando `ipcRenderer.invoke`.
-3.  **Dependências:** Bibliotecas nativas (ex: `better-sqlite3`, `knex`) devem ser instaladas como `dependencies` (não `devDependencies`) para garantir o empacotamento correto pelo Electron Builder.
+2.  **Type Safety (IPC):** As interfaces de dados (ex: `Transaction`, `Account`) devem ser compartilhadas entre Frontend e Backend para garantir que o payload enviado pelo Vue seja exatamente o que o Electron espera receber.
+3.  **Dependências Nativas (CRÍTICO):** Bibliotecas com bindings nativos (`better-sqlite3`, `knex`, `sqlite3`) DEVEM ser listadas na configuração `external` do `esbuild` dentro do `quasar.config.ts`. Elas não podem ser "bundleadas" pelo processo de build do TypeScript.
+4.  **Instalação:** Dependências de produção (`better-sqlite3`, `knex`) devem estar em `dependencies`, não `devDependencies`.
+5.  **Gerenciador de Pacotes:** Use **YARN** estritamente. Nunca use `npm install`.
+6.  **ORM:** Drizzle ORM é o padrão. Não use Knex ou TypeORM.
 
-### O Fluxo de Requisição
+### O Fluxo de Requisição Tipado
 
-1.  **UI (Vue):** Dispara uma ação (ex: `userStore.getTransactions()`).
-2.  **Preload:** Exposto via `contextBridge`, chama `ipcRenderer.invoke('channel', payload)`.
+1.  **UI (Vue):** Dispara uma ação (ex: `userStore.getTransactions()`) esperando um retorno do tipo `Promise<Transaction[]>`.
+2.  **Preload:** Exposto via `contextBridge`, chama `ipcRenderer.invoke`.
 3.  **Main Process:** Ouve o canal e delega para um **Controller**.
-4.  **Controller:** Valida a entrada e chama um **Service** ou **Repository**.
-5.  **Repository:** Executa a query no SQLite via `knex`.
+4.  **Controller:** Recebe o evento tipado `IpcMainInvokeEvent`, chama o Service/Repository.
+5.  **Repository:** Executa a query no SQLite via `drizzle-orm` retornando dados tipados.
 
 ## 4. Estrutura de Diretórios
 
-A estrutura deve separar claramente a UI da Lógica de Negócios (Backend Local).
+A estrutura separa UI e Backend, utilizando `.ts` em todo o código fonte.
 
+```text
 meu-projeto/
-├── src/ # [FRONTEND] Vue + Quasar
-│ ├── components/ # Componentes UI reutilizáveis
-│ ├── pages/ # Views/Telas da aplicação
-│ ├── stores/ # Gerenciamento de estado (Pinia)
-│ └── api/ # Fachada para chamadas da Preload Bridge
+├── src/                        # [FRONTEND] Vue + Quasar
+│   ├── components/             # Componentes UI
+│   ├── pages/                  # Views/Telas
+│   ├── stores/                 # Pinia Stores
+│   ├── shared/                 # [NOVO] Tipos compartilhados (Interfaces/DTOs)
+│   │   └── types.ts            # ex: export interface Transaction { ... }
+│   └── api/                    # Fachada para chamadas da Preload Bridge
 │
-├── src-electron/ # [BACKEND] Node.js
-│ ├── electron-main.js # Entry point do Electron
-│ ├── electron-preload.js # Ponte segura (IPC)
-│ │
-│ ├── db/ # Camada de Dados
-│ │ ├── index.js # Inicialização do SQLite
-│ │ ├── migrations/ # Arquivos de migração do Knex
-│ │ └── seeds/ # Dados iniciais
-│ │
-│ ├── controllers/ # Recebem eventos IPC e orquestram a resposta
-│ └── services/ # Regras de negócio puras (ex: Parsers, Cálculos)
+├── src-electron/               # [BACKEND] Node.js + TypeScript
+│   ├── electron-main.ts        # Entry point (Main Process)
+│   ├── electron-preload.ts     # Ponte segura (IPC)
+│   │
+│   ├── db/                     # Camada de Dados
+│   │   ├── index.ts            # Inicialização do SQLite (Connection)
+│   │   ├── migrations/         # Arquivos de migração do Knex
+│   │   └── seeds/              # Dados iniciais
+│   │
+│   ├── controllers/            # Recebem eventos IPC
+│   │   └── TransactionController.ts
+│   │
+│   └── services/               # Regras de negócio puras
+│       └── ImportService.ts
 │
 ├── package.json
-└── quasar.config.js
-
-## 5. Estratégia de Dados (SQLite)
-
-- **Localização:** O arquivo `.sqlite` deve ser criado dinamicamente na pasta `userData` do sistema operacional (obtida via `app.getPath('userData')`), garantindo persistência entre atualizações.
-- **Migrations:** O sistema deve rodar as migrations do Knex automaticamente na inicialização (`electron-main.js`) antes de abrir a janela principal.
+└── quasar.config.ts            # Configuração do Build (inclui externalização de módulos)
+```

@@ -1,43 +1,46 @@
 <template>
-  <q-page class="row items-center justify-evenly">
-    <example-component
-      title="Example component"
-      active
-      :todos="todos"
-      :meta="meta"
-    ></example-component>
+  <q-page class="q-pa-md">
+    <div class="text-h4 q-mb-md">Dashboard</div>
+    <div class="text-subtitle1">Bem-vindo ao Controle Financeiro</div>
+
+    <q-separator class="q-my-md" />
+
+    <!-- Test Data Table Placeholder -->
+    <div class="q-mt-md">
+      <div class="text-h6">Teste de Conexão com Banco de Dados</div>
+      <div v-if="testData.length">
+        <q-list bordered separator>
+          <q-item v-for="item in testData" :key="item.id">
+            <q-item-section>{{ item.id }} - {{ item.name }}</q-item-section>
+            <q-item-section side>{{ item.created_at }}</q-item-section>
+          </q-item>
+        </q-list>
+      </div>
+      <div v-else>
+        <p>Carregando ou sem dados...</p>
+      </div>
+    </div>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import type { Todo, Meta } from 'components/models';
-import ExampleComponent from 'components/ExampleComponent.vue';
+import { ref, onMounted } from 'vue';
 
-const todos = ref<Todo[]>([
-  {
-    id: 1,
-    content: 'ct1',
-  },
-  {
-    id: 2,
-    content: 'ct2',
-  },
-  {
-    id: 3,
-    content: 'ct3',
-  },
-  {
-    id: 4,
-    content: 'ct4',
-  },
-  {
-    id: 5,
-    content: 'ct5',
-  },
-]);
+interface TestData {
+  id: number;
+  name: string;
+  created_at: number;
+}
 
-const meta = ref<Meta>({
-  totalCount: 1200,
+const testData = ref<TestData[]>([]);
+
+onMounted(async () => {
+  try {
+    // @ts-expect-error - myAPI is injected via preload
+    testData.value = await window.myAPI.getTestData();
+    console.log('Dados recebidos:', testData.value);
+  } catch (e) {
+    console.error('Erro ao buscar dados:', e);
+  }
 });
 </script>
